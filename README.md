@@ -31,3 +31,5 @@
         - resourceURL.properties - will contain the associated resource to be used in HTTP method. Resource name will be passed from feature file and associated value will be picked from this file.
                 
 - \src\main\java --> All the java classes are kept in this folder under packages: pojo, stepDefinations and utilities. Before every method in this classes, appropriate comment is mentioned to explain what this method is being used for.
+
+- Reporting : \target\cucumber-reports\Cucumber.html --> After Execution completes, html report will be generated in this path with name "Cucumber.html". Same url is also printed in console after execution is completed. Open this URL in chrome to see the detailed cuccumber report.
