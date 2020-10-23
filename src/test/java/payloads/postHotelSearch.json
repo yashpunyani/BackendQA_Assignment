@@ -1,0 +1,37 @@
+{
+    "dates": {
+        "checkin": "%checkin",
+        "checkout": "%checkout"
+    },
+    "destination": "paris",
+    "room": [
+        {
+            "guest": [
+                {
+                    "type": "ADT"
+                },
+                {
+                    "type": "ADT"
+                },
+                {
+                    "type": "CHD",
+                    "age": 3
+                }
+            ]
+        },
+        {
+            "guest": [
+                {
+                    "type": "ADT"
+                },
+                {
+                    "type": "ADT"
+                },
+                {
+                    
+                }
+            ]
+        }
+    ],
+    "placeId": "%placeId"
+}

@@ -1,4 +1,3 @@
-@Scenario1
 Feature: GETHotelsGeoSuggest
 
   Scenario Outline: 1) Verify details of Hotels and its associated locations is fetched for <queryValue> city
@@ -52,6 +51,7 @@ Feature: GETHotelsGeoSuggest
       | displayType           | Location                    |
       | googleType.TypeNameEN | city                        |
       | googleType.TypeNameAR | مدينة                       |
+@Scenario1
 
     Examples: 
       | status | resourceURL         | queryValue |

@@ -9,9 +9,9 @@ import io.cucumber.junit.CucumberOptions;
 @CucumberOptions(
 		features = "src/test/java/features", 
 		glue = ".stepDefinations",
-		tags = "",
-		plugin = { "summary",
-		"pretty", "json:target/cucumber-reports/Cucumber.json", "junit:target/cucumber-reports/Cucumber.xml",
+		tags = "@Scenario2",
+		plugin = { "summary", 
+		 "json:target/cucumber-reports/Cucumber.json", "junit:target/cucumber-reports/Cucumber.xml",
 		"html:target/cucumber-reports/Cucumber.html" }, 
 		publish = true, 
 		dryRun = false,

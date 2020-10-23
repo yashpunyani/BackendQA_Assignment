@@ -25,12 +25,17 @@ import io.restassured.http.ContentType;
 import io.restassured.path.json.JsonPath;
 import io.restassured.response.Response;
 import io.restassured.response.ResponseBody;
+import io.restassured.specification.QueryableRequestSpecification;
 import io.restassured.specification.RequestSpecification;
+import io.restassured.specification.SpecificationQuerier;
 import utilities.BuildJsonPayload;
 import utilities.ReusableMethods;
 
+import org.apache.commons.configuration.ConfigurationException;
+import org.apache.commons.configuration.PropertiesConfiguration;
 import org.apache.commons.io.output.WriterOutputStream;
 import org.junit.Assert;
+import org.jvnet.staxex.StAxSOAPBody.Payload;
 
 import static io.restassured.RestAssured.given;
 
@@ -45,9 +50,10 @@ public class CommonSteps {
 	public static StringWriter writer;
 	public static PrintStream printer;
 	public static String jsonPathFieldValue;
-
+	public String payload;
 	JsonPath jsonPath;
 	static String singleRecordFromJsonResponse;
+	public static PropertiesConfiguration config = null;
 
 	@SuppressWarnings("rawtypes")
 	ResponseBody body;
@@ -117,12 +123,55 @@ public class CommonSteps {
 		switch (payloadName) {
 
 		case "postHotelSearch":
+
 			requestSpecs = requestSpecs.body(BuildJsonPayload.postHotelSearch(payloadData));
 			break;
 
 		default:
 			System.err.println("Payload method " + payloadName + " not found");
 			break;
+		}
+	}
+
+	// Will set json body from json file
+	@And("^I use json file to pass body \"([^\"]*)\"$")
+	public void setBodyInRequestFromJsonFile(String jsonFileName, Map<String, String> payloadData) throws Throwable {
+
+		payload = ReusableMethods.ReadPayloadFromJsonFile(
+				System.getProperty("user.dir") + "//src//test//java//payloads//" + jsonFileName + ".json");
+
+		Iterator<Entry<String, String>> it = payloadData.entrySet().iterator();
+
+		while (it.hasNext()) {
+			Map.Entry<String, String> pair = it.next();
+
+			if (pair.getValue().contains("NA")) {
+
+				// To delete values with comma and quote on both side
+				payload = payload.replaceAll("\"" + "\\b" + pair.getKey() + "\\b" + "\"" + ": " + "\"" + "%" + "\\b"
+						+ pair.getKey() + "\\b" + "\"" + ",", " ");
+
+				// To delete values with quote on both side
+				payload = payload.replaceAll("\"" + "\\b" + pair.getKey() + "\\b" + "\"" + ": " + "\"" + "%" + "\\b"
+						+ pair.getKey() + "\\b" + "\"", " ");
+
+				// To delete values with quote on one side and int on other
+				payload = payload.replaceAll(
+						"\"" + "\\b" + pair.getKey() + "\\b" + "\"" + ": " + "%" + "\\b" + pair.getKey() + "\\b" + ",",
+						" ");
+
+				// To delete values with quote on one side and int on other and without comma in
+				// end
+				payload = payload.replaceAll(
+						"\"" + "\\b" + pair.getKey() + "\\b" + "\"" + ": " + "%" + "\\b" + pair.getKey() + "\\b", " ");
+
+				payload = payload.replaceAll(pair.getKey() + ": " + "%" + pair.getValue(), " ");
+
+			}
+			else if (payload.contains("%" + pair.getKey())) {
+				payload = payload.replaceAll("%" + "\\b" + pair.getKey() + "\\b", pair.getValue());
+			}
+			requestSpecs.body(payload);
 		}
 	}
 
@@ -139,6 +188,9 @@ public class CommonSteps {
 			res = requestSpecs.when().put(resourceURL);
 		else
 			res = requestSpecs.when().delete(resourceURL);
+
+		String curlValue = ReusableMethods.genrateCurlFromRequestWriter(requestSpecs);
+		System.out.println(curlValue);
 	}
 
 	// Method to verify HTTP status code of response
@@ -214,6 +266,56 @@ public class CommonSteps {
 		jsonPath = ReusableMethods.stringToJson(res.asString());
 		String numberOfRecords = jsonPath.get(path + ".size()").toString();
 		Assert.assertEquals(expectedNumberOfRecords, numberOfRecords);
+	}
+
+	@Then("I read request into file \"([^\"]*)\"$")
+	public void readRequestIntoFile(String fileName, Map<String, String> pathFlag) throws Throwable {
+
+		config = new PropertiesConfiguration(
+				System.getProperty("user.dir") + "//src//test//java//resources//" + fileName + ".properties");
+		config.clear();
+		QueryableRequestSpecification queryable = SpecificationQuerier.query(requestSpecs);
+		jsonPath = ReusableMethods.stringToJson(queryable.getBody());
+
+		Iterator<Entry<String, String>> it = pathFlag.entrySet().iterator();
+		while (it.hasNext()) {
+			Map.Entry<String, String> pair = it.next();
+
+			if (((pair.getValue() == null)) || (!(pair.getValue().contains("NA")))) {
+				if (jsonPath.getString(pair.getKey()) == null) {
+					System.out.println("not found path : " + pair.getKey());
+				}
+
+				jsonPathFieldValue = jsonPath.getString(pair.getKey()).replaceAll("[\\[\\]]", "");
+				System.out.println(pair.getKey() + " : " + jsonPathFieldValue);
+
+				config.setProperty(pair.getKey(), jsonPathFieldValue);
+				config.save();
+			}
+		}
+	}
+
+	@Then("I read response into file \"([^\"]*)\"$")
+	public void readResponseIntoFile(String fileName, DataTable table) throws Throwable {
+
+		List<String> list = table.asList(String.class);
+		Iterator<String> it = list.iterator();
+		config = new PropertiesConfiguration(
+				System.getProperty("user.dir") + "//src//test//java//resources//" + fileName + ".properties");
+		config.clear();
+
+		jsonPath = ReusableMethods.stringToJson(res.asString());
+
+		while (it.hasNext()) {
+			String path = it.next();
+			if (jsonPath.getString(path) == null) {
+				System.out.println("not found path : " + path);
+			}
+			jsonPathFieldValue = jsonPath.getString(path).replaceAll("[\\[\\]]", "");
+			config.setProperty(path, jsonPathFieldValue);
+			config.save();
+
+		}
 	}
 
 	// Will execute after every scenario

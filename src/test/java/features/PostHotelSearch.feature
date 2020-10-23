@@ -1,4 +1,3 @@
-@Scenario2
 Feature: PostHotelSearch
 
   Scenario Outline: 1) Verify Hotel search request is posted and associated details are fetched
@@ -78,3 +77,26 @@ Feature: PostHotelSearch
       | Pass invalid checkin date format        |    400 | 1-10-20    | 30-09-2020 | paris       | ChIJD7fiBh9u5kcRYJSMaMOCCwQ | [Gateway:``] Bad Request | The dates.checkin does not match the format d-m-Y.     |
       | Pass invalid checkout date format       |    400 | 01-10-2020 | 3-09-2020  | paris       | ChIJD7fiBh9u5kcRYJSMaMOCCwQ | [Gateway:``] Bad Request | The dates.checkout does not match the format d-m-Y.    |
       | Pass without destination                |    400 | 10-10-2020 | 30-10-2020 |             | ChIJD7fiBh9u5kcRYJSMaMOCCwQ | [Gateway:``] Bad Request | The destination field is required.                     |
+
+  Scenario Outline: 3) Verify Hotel search request is posted and associated details are fetched
+    Given Testing Environment
+    When I pass Headers
+      | Content-Type | application/json |
+    And I use json file to pass body "postHotelSearch"
+      | checkin  | <checkin>  |
+      | checkout | <checkout> |
+      | placeId  | <placeId>  |
+    And I perform "POST" operation "<resourceURL>"
+    Then I should get http status "<status>" in response
+    And I verify response content type is JSON
+    And I read request into file "request"
+      | dates.checkin  |  |
+      | dates.checkout |  |
+    And I read response into file "response"
+      | type  |
+      | query |
+
+    @Scenario2
+    Examples: 
+      | status | resourceURL     | checkin    | checkout   | destination | placeId                     |
+      |    200 | postHotelSearch | 26-10-2020 | 30-10-2020 | paris       | ChIJD7fiBh9u5kcRYJSMaMOCCwQ |
