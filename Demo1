@@ -1,0 +1,142 @@
+package com.bawaba.utilities;
+
+import static io.restassured.RestAssured.given;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.util.ArrayList;
+
+import java.util.Date;
+
+import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+import com.bawaba.stepdefs.CommonSteps;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.warrenstrange.googleauth.GoogleAuthenticator;
+import com.warrenstrange.googleauth.GoogleAuthenticatorConfig.GoogleAuthenticatorConfigBuilder;
+
+import io.restassured.RestAssured;
+import io.restassured.http.Header;
+import io.restassured.http.Headers;
+import io.restassured.path.json.JsonPath;
+import io.restassured.response.Response;
+import io.restassured.specification.QueryableRequestSpecification;
+import io.restassured.specification.RequestSpecification;
+import io.restassured.specification.SpecificationQuerier;
+
+public class ReusableMethods {
+
+	public static JsonPath stringToJson(String res1) {
+		JsonPath jsonPath = new JsonPath(res1);
+		return jsonPath;
+	}
+	public static List<String> getChildNodeFromJsonArray(String parentNode, String childNode, String value) throws IOException {
+	ObjectMapper objectMapper = new ObjectMapper();
+	JsonNode jsonNode = objectMapper.readTree(CommonSteps.res.asString()).get(parentNode);
+	List<String> requiredNode = new ArrayList<String>();
+	if (jsonNode.isArray()) {
+		for (JsonNode jsonNode2 : jsonNode) {
+			if (jsonNode2.get(childNode) != null && jsonNode2.get(childNode).asText().equals(value)) {
+//				System.out.print(jsonNode2);
+				requiredNode.add(jsonNode2.toString());
+			}
+		}
+//		System.out.println("requiredNode"+requiredNode);
+	}
+	return requiredNode;
+	}
+
+	public static boolean isContain(String source, String subItem){
+        String pattern = "\\b"+subItem+"\\b";
+//        System.out.println("pattern"+ pattern);
+        Pattern p=Pattern.compile(pattern);
+        Matcher m=p.matcher(source);
+        return m.find();
+   }
+	
+	
+	// returns a JsonPath variable which can be used to traverse json response
+	public static JsonPath rawToJson(Response r) {
+		String res = r.asString();
+		JsonPath jsonPath = new JsonPath(res);
+		return jsonPath;
+	}
+
+	// to read payload from Json file
+	public static String ReadPayloadFromJsonFile(String path) throws IOException {
+		return new String(Files.readAllBytes(Paths.get(path)));
+	}
+
+	// Returns the Authentication token
+	public static String getAuthKey(String baseURI) {
+		RestAssured.baseURI = CommonSteps.prop.getProperty("3Scale_" + baseURI);
+		RestAssured.useRelaxedHTTPSValidation();
+		String userName = CommonSteps.prop.getProperty("userName_" + baseURI);
+		String password = CommonSteps.prop.getProperty("password_" + baseURI);
+		Response res = given().auth().basic(userName, password)
+		        .header("Content-Type", "application/x-www-form-urlencoded")
+		        .header("Authorization", CommonSteps.prop.getProperty("3ScaleAuth_" + baseURI))
+		        .formParam("grant_type", "client_credentials").post(CommonSteps.prop.getProperty("3Scale_" + baseURI));
+//		res.prettyPrint();
+		JsonPath jsonPath = ReusableMethods.rawToJson(res);
+		String x = jsonPath.getString("access_token");
+		return x;
+	}
+
+	public static String getAuthCode(String seed){
+		GoogleAuthenticatorConfigBuilder configBuilder = new GoogleAuthenticatorConfigBuilder();
+		configBuilder.setCodeDigits(6);
+		configBuilder.setWindowSize(11);
+		configBuilder.setTimeStepSizeInMillis(60000);
+		GoogleAuthenticator gAuth = new GoogleAuthenticator(configBuilder.build());
+		String totp = Integer.toString(gAuth.getTotpPassword(seed, new Date().getTime()));
+		totp = totp.length() == 5 ? "0" + totp : totp;
+		System.setProperty("totp", totp);
+		System.out.println("SEED: " + seed + " , TOTP:--" + totp);
+		return totp;
+   }
+	
+
+	public static int getRandomIntegerBetweenRange(int min, int max) {
+		int x = (int) (Math.random() * ((max - min) + 1)) + min;
+		return x;
+	}
+
+	public static String generateCurlFromRequestWriter(RequestSpecification reqSpec) {
+		String reqMethod = "";
+		String reqURI = "";
+		String curlVal = "";
+		String headerValue = "";
+		try {
+			QueryableRequestSpecification queryable = SpecificationQuerier.query(reqSpec);
+			reqMethod = queryable.getMethod();
+			reqURI = queryable.getURI();
+			curlVal = "curl -X " + reqMethod + " '" + reqURI + "'" + System.lineSeparator();
+			Headers reqHeaders = queryable.getHeaders();
+			for (Header headerVal : reqHeaders) {
+				headerValue = headerVal.toString().replace("=", ":");
+				if (headerValue.contains("Authorization")) {
+					headerValue = headerValue.replaceAll("Bearer\\s.*", "Bearer ****");
+				}
+				curlVal = curlVal.concat(" -H '").concat(headerValue).concat("'").concat(System.lineSeparator());
+
+			}
+
+			String reqBody = queryable.getBody();
+			if (reqBody != null) {
+				if (!reqBody.isEmpty()) {
+					curlVal = curlVal.concat(" -d '").concat(reqBody.toString()).concat("'");
+				}
+			}
+			// Cookies reqCookie = queryable.getCookies();
+
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+		return curlVal;
+	}
+}
