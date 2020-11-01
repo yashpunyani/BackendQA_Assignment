@@ -1,1 +1,1527 @@
-w
+package com.bawaba.stepdefs;
+
+import static io.restassured.RestAssured.given;
+
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.PrintStream;
+import java.io.StringWriter;
+import java.net.URL;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.Properties;
+import java.util.Random;
+import org.apache.commons.configuration.PropertiesConfiguration;
+import org.apache.commons.io.output.WriterOutputStream;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.bson.Document;
+import org.junit.Assert;
+
+import com.aventstack.extentreports.ExtentTest;
+import com.aventstack.extentreports.Status;
+import com.bawaba.runner.TestRunner;
+import com.bawaba.utilities.ReusableMethods;
+import com.bawaba.utilities.TestAESEncryption;
+import com.bawaba.utilities.TestContext;
+import com.enbd.resourceManager.ReportsManager;
+import com.jayway.jsonpath.Configuration;
+import com.jayway.jsonpath.DocumentContext;
+import com.jayway.jsonpath.Option;
+import com.mongodb.MongoClient;
+import com.mongodb.MongoClientOptions;
+import com.mongodb.MongoClientURI;
+import com.mongodb.client.FindIterable;
+import com.mongodb.client.MongoCollection;
+import com.mongodb.client.MongoCursor;
+import com.mongodb.client.MongoDatabase;
+import com.mongodb.client.model.Filters;
+import com.mongodb.client.model.Projections;
+import cucumber.api.DataTable;
+import cucumber.api.Scenario;
+import cucumber.api.java.After;
+import cucumber.api.java.Before;
+import cucumber.api.java.en.And;
+import cucumber.api.java.en.Given;
+import cucumber.api.java.en.Then;
+import cucumber.api.java.en.When;
+import io.restassured.RestAssured;
+import io.restassured.filter.log.RequestLoggingFilter;
+import io.restassured.filter.log.ResponseLoggingFilter;
+import io.restassured.http.ContentType;
+import io.restassured.path.json.JsonPath;
+import io.restassured.response.Response;
+import io.restassured.response.ResponseBody;
+import io.restassured.specification.FilterableRequestSpecification;
+import io.restassured.specification.QueryableRequestSpecification;
+import io.restassured.specification.RequestSpecification;
+import io.restassured.specification.SpecificationQuerier;
+
+public class CommonSteps {
+
+	static RequestSpecification requestSpecs;
+	static ResponseBody body;
+	public static Scenario step;
+	public static Response res;
+	static String token;
+	public static FileInputStream fis;
+	public static Properties prop = new Properties();
+	public static Properties propResource = new Properties();
+	public static Properties mongoprop = new Properties();
+	public static Properties propLog4j = new Properties();
+	long currentTimeStamp = System.currentTimeMillis();
+	static String environmentName;
+	static String msEnvironmentName;
+	static String threeDSecureEvironmentName;
+	static String jiraEnvironmentName;
+	static String generateKloveReport;
+	static String generateLogs;
+	public static String resourceURL;
+	public static Logger log = LogManager.getLogger(CommonSteps.class.getName());
+	public static StringWriter requestWriter;
+	public static PrintStream requestCapture;
+	public static StringWriter responseWriter;
+	public static PrintStream responseCapture;
+	public static StringWriter errorWriter;
+	public static PrintStream errorCapture;
+	public static String locationHeaderValue;
+	public static int getNoOfRecords;
+	public static long uniquereferencecode;
+	public String encryptedKey;
+	public static String jsonResponseFieldValue;
+	public String payload;
+	public static String bodyStringValue;
+	public static JsonPath jsonPathResponse;
+	public static PropertiesConfiguration config = null;
+	public static String random;
+
+	public static String timestampForGlobalTransaction;
+
+	public static String jsessionid;
+	public static String AuthCode;
+	public static String retailAccessToken;
+	
+
+	URL envPropertyPath = getClass().getClassLoader().getResource("env.properties");
+	URL resourcePropertyPath = getClass().getClassLoader().getResource("resource.properties");
+	URL mongoPropertyPath = getClass().getClassLoader().getResource("mongodb.properties");
+
+	private static ExtentTest test;
+	TestAESEncryption testAESEncryption = new TestAESEncryption();
+
+	Date now = new Date();
+
+	URL temp = getClass().getClassLoader().getResource("env.properties");
+	URL temp1 = getClass().getClassLoader().getResource("resource.properties");
+	TestContext testContext;
+	Map<String, Object> bodyMap;
+	static Map<String, String> serviceListMap = new HashMap<>();
+
+	public CommonSteps(TestContext context) {
+		this.testContext = context;
+	}
+
+	@Before
+	public void beforeEveryScenario(Scenario s) throws IOException {
+		ReportsManager.initReporting(s);
+		requestWriter = new StringWriter();
+		requestCapture = new PrintStream(new WriterOutputStream(requestWriter), true);
+
+		responseWriter = new StringWriter();
+		responseCapture = new PrintStream(new WriterOutputStream(responseWriter), true);
+
+		errorWriter = new StringWriter();
+		errorCapture = new PrintStream(new WriterOutputStream(errorWriter), true);
+
+		fis = new FileInputStream(envPropertyPath.getFile());
+		prop.load(fis);
+
+		fis = new FileInputStream(resourcePropertyPath.getFile());
+		propResource.load(fis);
+
+
+		generateLogs = prop.getProperty("generateLogs");
+		if(generateLogs.equalsIgnoreCase("yes")) {
+			log.info(
+					"-----------------------------------------------------------------------------------------------------");
+			log.info(s.getName());
+			log.info(
+					"-----------------------------------------------------------------------------------------------------");
+		}
+
+		System.out.println(
+				"-----------------------------------------------------------------------------------------------------");
+		System.out.println(s.getName());
+		System.out.println(
+				"-----------------------------------------------------------------------------------------------------");
+
+
+		if ((System.getenv("env") == null || System.getenv("env").isEmpty())
+				&& (System.getenv("msenv") == null || System.getenv("msenv").isEmpty())) {
+
+			environmentName = prop.getProperty("Environment");
+			msEnvironmentName = prop.getProperty("MSEnvironment");
+			threeDSecureEvironmentName = prop.getProperty("threeDSecureEnvironment");
+			jiraEnvironmentName = prop.getProperty("JiraEnvironment");
+		} else {
+			environmentName = System.getenv("env");
+			msEnvironmentName = System.getenv("msenv");
+		}
+
+		generateKloveReport = prop.getProperty("generateKloveReport");
+		// for Klove reporting
+		if (generateKloveReport.equalsIgnoreCase("yes")) {
+			if (TestRunner.extentReports != null) {
+				test = TestRunner.extentReports.createTest(s.getName() + " started");
+				if(generateLogs.equalsIgnoreCase("yes")) {
+					log.info("Scenario Start - " + s.getName());
+					log.info("Scenario Start - " + s.getSourceTagNames());
+				}
+			}
+		}
+		if(generateLogs.equalsIgnoreCase("yes")) {
+			log.info("BAWABA Environment: "+prop.getProperty(environmentName));
+		}
+	}
+
+	// Get BAWABA 3Scale URL
+	@Given("^Testing environment$")
+	public void getBaseURI() throws Throwable {		
+		RestAssured.baseURI = prop.getProperty(environmentName);
+		RestAssured.useRelaxedHTTPSValidation();
+	}
+
+	@Given("^Testing environment for MS$")
+	public void getMSBaseURI() throws Throwable {
+		RestAssured.baseURI = prop.getProperty(msEnvironmentName);
+		RestAssured.useRelaxedHTTPSValidation();
+	}
+
+	// Mongo DB Data verification
+	@And("^MongoDB data Verification$")
+	public void mongo_connection_is_establsihed(Map<String, String> queryparamters) throws Throwable {
+
+		fis = new FileInputStream(mongoPropertyPath.getFile());
+		mongoprop.load(fis);
+		String temp;
+		String temp1;
+		String temp2;
+		MongoClient mongoClient = new MongoClient(
+				new MongoClientURI(mongoprop.getProperty(queryparamters.get("dbName") + environmentName)));
+		MongoDatabase database = mongoClient.getDatabase(queryparamters.get("dbName"));
+		MongoCollection<Document> collection = database.getCollection(queryparamters.get("collectionName"));
+		FindIterable<Document> findrec = collection.find();
+		if ((!(queryparamters.get("queryvalue") == null)) && (!queryparamters.get("queryvalue").isEmpty())) {
+			if (queryparamters.get("queryvalue").contains("environment")) {
+				findrec = collection.find(Filters.eq(queryparamters.get("querycolumnName"),
+						prop.getProperty(environmentName + queryparamters.get("queryvalue").substring(
+								queryparamters.get("queryvalue").indexOf("environment") + "environment".length()))));
+			} else if (queryparamters.get("queryvalue").contains("uniquereferencecode")) {
+				findrec = collection
+						.find(Filters.eq(queryparamters.get("querycolumnName"), String.valueOf(uniquereferencecode)));
+
+			} else if (queryparamters.get("queryvalue").contains("providerAccountId")) {
+				Properties propYodlee = new Properties();
+				fis = new FileInputStream(System.getProperty("user.dir") + "//src//test//resources//jsonObjects//postYodleeStatement.properties");
+				propYodlee.load(fis);
+				//find record where value of field = x
+				findrec = collection
+						.find(Filters.eq(queryparamters.get("querycolumnName"), propYodlee.getProperty("providerAccountId")));
+			}
+			else if (queryparamters.get("queryvalue").contains("locationHeader")) {
+				findrec = collection
+						.find(Filters.eq(queryparamters.get("querycolumnName"), locationHeaderValue));
+			}
+			else if (queryparamters.get("queryvalue").contains("jsonResponseFieldValue")) {
+				findrec = collection
+						.find(Filters.eq(queryparamters.get("querycolumnName"), jsonResponseFieldValue));
+			}else {
+				findrec = collection
+						.find(Filters.eq(queryparamters.get("querycolumnName"), queryparamters.get("queryvalue")));
+				}
+			MongoCursor<Document> cursor = findrec.iterator();
+			try {
+
+				if (queryparamters.get("queryvalue").contains("environment") && cursor.hasNext()) {
+					while (cursor.hasNext()) {
+						temp = cursor.next().toJson();
+						if(generateLogs.equalsIgnoreCase("yes")) {
+							log.info("Mongo DB records: " + temp);
+						}
+						System.out.println("Mongo DB records : " + temp);
+						Assert.assertTrue(temp.contains(prop.getProperty(environmentName + queryparamters
+								.get("queryvalue").substring(queryparamters.get("queryvalue").indexOf("environment")
+										+ "environment".length()))));
+					}
+				} else if (queryparamters.get("queryvalue").contains("locationHeader") && cursor.hasNext()) {
+					while (cursor.hasNext()) {
+						temp2 = cursor.next().toJson();
+						if(generateLogs.equalsIgnoreCase("yes")) {
+						log.info("Mongo DB records: " + temp2);
+						}
+						System.out.println("Mongo DB records : " + temp2);
+						Assert.assertTrue(temp2.contains(locationHeaderValue));
+					}
+				} 
+				 else if (queryparamters.get("queryvalue").contains("jsonResponseFieldValue") && cursor.hasNext()) {
+						while (cursor.hasNext()) {
+							temp2 = cursor.next().toJson();
+							if(generateLogs.equalsIgnoreCase("yes")) {
+							log.info("Mongo DB records: " + temp2);
+							}
+							System.out.println("Mongo DB records : " + temp2);
+							Assert.assertTrue(temp2.contains(jsonResponseFieldValue));
+						}
+					} 
+				else if ((!queryparamters.get("queryvalue").contains("uniquereferencecode"))
+						&& (!queryparamters.get("queryvalue").contains("environment") && cursor.hasNext())) {
+					while (cursor.hasNext()) {
+						temp1 = cursor.next().toJson();
+						if(generateLogs.equalsIgnoreCase("yes")) {
+							log.info("Mongo DB records: " + temp1);
+						}
+						System.out.println("Mongo DB records : " + temp1);
+						Assert.assertTrue(temp1.contains(queryparamters.get("queryvalue")));
+					}
+				} else if (queryparamters.get("queryvalue").contains("uniquereferencecode") && cursor.hasNext()) {
+					while (cursor.hasNext()) {
+						temp2 = cursor.next().toJson();
+						if(generateLogs.equalsIgnoreCase("yes")) {
+							log.info("Mongo DB records: " + temp2);
+						}
+						System.out.println("Mongo DB records : " + temp2);
+						Assert.assertTrue(temp2.contains(String.valueOf(uniquereferencecode)));
+					}
+				}else
+					Assert.fail();
+
+			} finally {
+				cursor.close();
+				mongoClient.close();
+			}
+
+		} else
+			Assert.fail();
+
+	}
+
+	// Set headers and there values
+	@When("^I pass headers$")
+	public void setHeaders(Map<String, String> headers) throws Throwable {
+		Iterator<Entry<String, String>> it = headers.entrySet().iterator();
+		requestSpecs = given().filter(new RequestLoggingFilter(requestCapture))
+				.filter(new ResponseLoggingFilter(responseCapture)).contentType(ContentType.JSON);
+		while (it.hasNext()) {
+			Map.Entry<String, String> pair = it.next();
+			Random rand = new Random();
+			int n = rand.nextInt(50);
+			// set Unique-Reference-Code as unique
+			if (pair.getKey().equals("Unique-Reference-Code") && !(pair.getValue().isEmpty())
+					&& !(pair.getValue().equals("uniquereferencecode"))) {
+				requestSpecs = requestSpecs.header(pair.getKey(), pair.getValue());
+				uniquereferencecode = currentTimeStamp;
+			} else if (pair.getKey().equals("Unique-Reference-Code")
+					&& (pair.getValue().equals("uniquereferencecode"))) {
+				uniquereferencecode = currentTimeStamp;
+				requestSpecs = requestSpecs.header(pair.getKey(), uniquereferencecode);
+			} else if ((pair.getKey().equals("Unique-Reference-Code")) && (pair.getValue().isEmpty())) {
+				requestSpecs = requestSpecs.header(pair.getKey(), "" + n + currentTimeStamp);
+
+			}
+			// set Client-Timestamp as unique
+			else if (pair.getKey().equals("Client-Timestamp")) {
+				if(pair.getValue().isEmpty())
+					requestSpecs = requestSpecs.header(pair.getKey(), currentTimeStamp);
+				else
+					requestSpecs = requestSpecs.header(pair.getKey(), pair.getValue());
+			} 
+			else if (pair.getKey().equalsIgnoreCase("globalTransaction")) {
+				timestampForGlobalTransaction = String.valueOf(currentTimeStamp);
+			}
+			else if (pair.getKey().equalsIgnoreCase("Authorization")&&pair.getValue().equalsIgnoreCase("retail")) {
+				requestSpecs = requestSpecs.header(pair.getKey(), "Bearer " + retailAccessToken);
+			}
+//			else if (pair.getKey().equalsIgnoreCase("Authorization")&&pair.getValue().equalsIgnoreCase("retailBasicAuth")) {
+//				requestSpecs = requestSpecs.auth().basic("05c261dc", "dd23f62882e724cdd1acc233da69b19e");
+//			}
+			else if (pair.getKey().equalsIgnoreCase("sessionId")&&pair.getValue().equalsIgnoreCase("setSessionId")) {
+//				System.out.println("JSESSIONID = " +jsessionid);
+				requestSpecs = requestSpecs.sessionId(jsessionid);
+			}
+			else {
+				requestSpecs = requestSpecs.header(pair.getKey(), pair.getValue());
+			}
+		}
+	}
+
+	// to verify response by passing invalid values
+	@When("^I pass invalid headers$")
+	public void invalidHeader(Map<String, String> headers) throws Throwable {
+		Iterator<Entry<String, String>> it = headers.entrySet().iterator();
+		requestSpecs = given().filter(new RequestLoggingFilter(requestCapture))
+				.filter(new ResponseLoggingFilter(responseCapture)).contentType(ContentType.JSON);
+		while (it.hasNext()) {
+			Map.Entry<String, String> pair = it.next();
+			requestSpecs = requestSpecs.header(pair.getKey(), pair.getValue());
+		}
+	}
+
+	// Set queryParametres and there values
+	/**
+	 * 
+	 * Modified by: @author HariharanV
+	 * Modification: Added encryption logic to pick keys automatically -08/2020
+	 * @param queryParam
+	 * @throws Throwable
+	 */
+	@And("^I pass queryParametres$")
+	public void setQueryParam(Map<String, String> queryParam) throws Throwable {
+		String temp;
+		Iterator<Entry<String, String>> it = queryParam.entrySet().iterator();
+		while (it.hasNext()) {
+			Map.Entry<String, String> pair = it.next();
+
+			if (pair.getValue().contains("Encrypt")) {
+				if (pair.getValue().contains("ECT")) {
+					temp = pair.getValue().substring(pair.getValue().indexOf("EncryptECT") + "EncryptECT".length());
+					encryptedKey = testAESEncryption.getEncryptedKey(temp, "ECT");
+				} else if (pair.getValue().contains("LIV")) {
+					temp = pair.getValue().substring(pair.getValue().indexOf("EncryptLIV") + "EncryptLIV".length());
+					encryptedKey = testAESEncryption.getEncryptedKey(temp, "LIV");
+				} else if (pair.getValue().contains("ROA")) {
+					temp = pair.getValue().substring(pair.getValue().indexOf("EncryptROA") + "EncryptROA".length());
+					encryptedKey = testAESEncryption.getEncryptedKey(temp, "ROA");
+				} else if (pair.getValue().contains("BPM")) {
+					temp = pair.getValue().substring(pair.getValue().indexOf("EncryptBPM") + "EncryptBPM".length());
+					encryptedKey = testAESEncryption.getEncryptedKey(temp, "BPM");
+
+				}else if (pair.getValue().contains("ART")) {
+					temp = pair.getValue().substring(pair.getValue().indexOf("EncryptART") + "EncryptART".length());
+					encryptedKey = testAESEncryption.getEncryptedKey(temp, "ART");
+				}
+
+				else {
+					FilterableRequestSpecification httpRequestHead = (FilterableRequestSpecification) requestSpecs;
+					String strChannel="BNK";
+					String strFinID="EBI";
+					if(httpRequestHead.getHeaders().hasHeaderWithName("Channel-Id"))
+						strChannel=httpRequestHead.getHeaders().get("Channel-Id").getValue();
+					if(httpRequestHead.getHeaders().hasHeaderWithName("Financial-Id"))
+						strFinID=httpRequestHead.getHeaders().get("Financial-Id").getValue();
+					temp = pair.getValue().substring(pair.getValue().indexOf("Encrypt") + "Encrypt".length());
+					encryptedKey = testAESEncryption.getEncryptedKey(temp,strFinID, strChannel);
+					// System.out.println("check testing value "+pair.getValue());
+					//					temp = pair.getValue().substring(pair.getValue().indexOf("Encrypt") + "Encrypt".length());
+					// System.out.println("value of temp is:"+temp);
+					//					encryptedKey = testAESEncryption.getEncryptedKey(temp, "default");
+					// System.out.println("The encrypted key is: " + encryptedKey );
+				}
+
+				requestSpecs = requestSpecs.queryParam(pair.getKey(), encryptedKey);
+			} else if (pair.getValue().contains("jsonResponseFieldValue")) {
+				requestSpecs = requestSpecs.queryParam(pair.getKey(), jsonResponseFieldValue);
+			} else if (pair.getValue().contains("locationHeader")) {
+				requestSpecs = requestSpecs.queryParam(pair.getKey(), locationHeaderValue);
+			} else if (pair.getValue().contains("environment")) {
+				requestSpecs = requestSpecs.queryParam(pair.getKey(), prop.getProperty(environmentName
+						+ pair.getValue().substring(pair.getValue().indexOf("environment") + "environment".length())));
+			} else if (pair.getValue().matches("currentdate")) {
+
+				requestSpecs = requestSpecs.queryParam(pair.getKey(), String.valueOf(currentTimeStamp));
+			}
+			else if ((pair.getKey().contains("&") && pair.getValue().contains("&"))
+					&& (pair.getKey().split("&").length == pair.getValue().split("&").length)) {
+				String queryParamKey[] = pair.getKey().split("&");
+				String queryParamValue[] = pair.getValue().split("&");
+
+				for (int i = 0; i < queryParamKey.length; i++) 
+					requestSpecs = requestSpecs.queryParam(queryParamKey[i], queryParamValue[i]);
+			}
+			else if (pair.getValue().contains("IntraBankTransactionId")) {
+
+				requestSpecs = requestSpecs.queryParam(pair.getKey(), IntraBankSteps.IntraBankTransactionId);
+			}
+
+			else if (pair.getValue().contains("IntraBankTransactionDate")) {
+				requestSpecs = requestSpecs.queryParam(pair.getKey(), IntraBankSteps.IntraBankTransactionDate);
+			}
+			else if (pair.getValue().contains("InterBankTransactionId")) {
+				requestSpecs = requestSpecs.queryParam(pair.getKey(), IntraBankSteps.id);
+			}
+			else if (pair.getValue().contains("InterBankTransactionDate")) {
+				requestSpecs = requestSpecs.queryParam(pair.getKey(), IntraBankSteps.date);
+			}
+			else if (pair.getValue().equalsIgnoreCase("globalTranId")) {
+				requestSpecs = requestSpecs.queryParam(pair.getKey(), IntraBankSteps.propGlobalTran.getProperty("id[0]"));
+			}
+			else if (pair.getValue().equalsIgnoreCase("globalTranDate")) {
+				requestSpecs = requestSpecs.queryParam(pair.getKey(), IntraBankSteps.propGlobalTran.getProperty("date[0]"));
+			}
+			else {
+				requestSpecs = requestSpecs.queryParam(pair.getKey(), pair.getValue());
+			}
+		}
+	}
+
+	// Set pathParametres and there values
+	/**
+	 * Modified by: @author HariharanV
+	 * Modification: Added encryption logic to pick keys automatically -08/2020
+	 * @param pathParam
+	 * @throws Throwable
+	 */
+	@And("^I pass pathParametres$")
+	public void setPathParam(Map<String, String> pathParam) throws Throwable {
+		String temp;
+		Iterator<Entry<String, String>> it = pathParam.entrySet().iterator();
+
+		while (it.hasNext()) {
+			Map.Entry<String, String> pair = it.next();
+			if (pair.getValue().contains("Encrypt")) {
+				if (pair.getValue().contains("ECT")) {
+					temp = pair.getValue().substring(pair.getValue().indexOf("EncryptECT") + "EncryptECT".length());
+					encryptedKey = testAESEncryption.getEncryptedKey(temp, "ECT");
+				} else if (pair.getValue().contains("LIV")) {
+					temp = pair.getValue().substring(pair.getValue().indexOf("EncryptLIV") + "EncryptLIV".length());
+					encryptedKey = testAESEncryption.getEncryptedKey(temp, "LIV");
+				} else if (pair.getValue().contains("ROA")) {
+					temp = pair.getValue().substring(pair.getValue().indexOf("EncryptROA") + "EncryptROA".length());
+					encryptedKey = testAESEncryption.getEncryptedKey(temp, "ROA");
+				} else if (pair.getValue().contains("BPM")) {
+					temp = pair.getValue().substring(pair.getValue().indexOf("EncryptBPM") + "EncryptBPM".length());
+					encryptedKey = testAESEncryption.getEncryptedKey(temp, "BPM");
+				}else {
+					FilterableRequestSpecification httpRequestHead = (FilterableRequestSpecification) requestSpecs;
+					String strChannel="BNK";
+					String strFinID="EBI";
+					if(httpRequestHead.getHeaders().hasHeaderWithName("Channel-Id"))
+						strChannel=httpRequestHead.getHeaders().get("Channel-Id").getValue();
+					if(httpRequestHead.getHeaders().hasHeaderWithName("Financial-Id"))
+						strFinID=httpRequestHead.getHeaders().get("Financial-Id").getValue();
+					temp = pair.getValue().substring(pair.getValue().indexOf("Encrypt") + "Encrypt".length());
+					encryptedKey = testAESEncryption.getEncryptedKey(temp,strFinID, strChannel);
+
+					// System.out.println("check testing value "+pair.getValue());
+					//					temp = pair.getValue().substring(pair.getValue().indexOf("Encrypt") + "Encrypt".length());
+					// System.out.println("value of temp is:"+temp);
+					//					encryptedKey = testAESEncryption.getEncryptedKey(temp, "default");
+					// System.out.println("The encrypted key is: " + encryptedKey );
+				}
+				requestSpecs = requestSpecs.pathParam(pair.getKey(), encryptedKey);
+			} else if (pair.getValue().contains("locationHeader")) {
+				requestSpecs = requestSpecs.pathParam(pair.getKey(), locationHeaderValue);
+			} else if (pair.getValue().contains("jsonResponseFieldValue")) {
+				requestSpecs = requestSpecs.pathParam(pair.getKey(), jsonResponseFieldValue);
+			}
+			// condition to handle pseudo ids
+			else if (pair.getValue().contains("environment")) {
+				requestSpecs = requestSpecs.pathParam(pair.getKey(), prop.getProperty(environmentName
+						+ pair.getValue().substring(pair.getValue().indexOf("environment") + "environment".length())));
+			}
+			else if (pair.getValue().contains("refNumber")) {
+				requestSpecs = requestSpecs.pathParam(pair.getKey(), IntraBankSteps.interBankReferenceNumber);
+			}
+
+			 else if (pair.getValue().equalsIgnoreCase("mepaytranid")) {
+					requestSpecs = requestSpecs.pathParam(pair.getKey(), IntraBankSteps.propMePayTransactions.getProperty("transactionId"));
+		    	}
+			  else if (pair.getValue().equalsIgnoreCase("globalTranId")) {
+				  fis = new FileInputStream(System.getProperty("user.dir") + "//src//test//resources//jsonObjects//GlobalTransactions.properties");
+				  IntraBankSteps.propGlobalTran.load(fis);
+					requestSpecs = requestSpecs.pathParam(pair.getKey(), IntraBankSteps.propGlobalTran.getProperty("id[0]"));
+		    	}
+			else {
+				requestSpecs = requestSpecs.pathParam(pair.getKey(), pair.getValue());
+			}
+		}
+	}
+
+	// Fetch authorization token and set its value to Authorization header
+	@And("^I set Authorisation token$")
+	public static void setAuthorisationToken() throws Throwable {
+
+//		token="eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJMWlBLRjA4ajU4cmktSXZLRlpaaEpRbGVYazdqZV9Nd1pPN3AzekJ6a2hnIn0.eyJqdGkiOiIxYjFhOTNmYy03ZjI3LTQ5MTItYTRmNy1hMjFjMDlmYWJhYzkiLCJleHAiOjE2MDI3OTk2MDMsIm5iZiI6MCwiaWF0IjoxNjAyNzk2MDAzLCJpc3MiOiJodHRwczovL3Nzby5jbG91ZC5lbWlyYXRlc25iZC5jb20vYXV0aC9yZWFsbXMvZW5iZCIsImF1ZCI6IjU2NWU3ODk3Iiwic3ViIjoiMTczMGIwMmEtMDY2ZC00MjgzLWI5ZTItMWJlNDBjOGUwN2IxIiwidHlwIjoiQmVhcmVyIiwiYXpwIjoiNTY1ZTc4OTciLCJhdXRoX3RpbWUiOjAsInNlc3Npb25fc3RhdGUiOiI3MzY0YjNiNy1iZWRiLTRjNDgtYTRlMi0wOTA0YzYzOWNlOGQiLCJhY3IiOiIxIiwiYWxsb3dlZC1vcmlnaW5zIjpbXSwicmVhbG1fYWNjZXNzIjp7InJvbGVzIjpbInVtYV9hdXRob3JpemF0aW9uIl19LCJyZXNvdXJjZV9hY2Nlc3MiOnsiYWNjb3VudCI6eyJyb2xlcyI6WyJtYW5hZ2UtYWNjb3VudCIsIm1hbmFnZS1hY2NvdW50LWxpbmtzIiwidmlldy1wcm9maWxlIl19fSwiY2xpZW50SWQiOiI1NjVlNzg5NyIsImNsaWVudEhvc3QiOiIxMC4xOTEuOS40OSIsInByZWZlcnJlZF91c2VybmFtZSI6InNlcnZpY2UtYWNjb3VudC01NjVlNzg5NyIsImNsaWVudEFkZHJlc3MiOiIxMC4xOTEuOS40OSIsImVtYWlsIjoic2VydmljZS1hY2NvdW50LTU2NWU3ODk3QHBsYWNlaG9sZGVyLm9yZyJ9.OlNXGVUkYAaYoiBoxP9GKdHdXxcRzweh6uIpRA00LrCTpuIVhxgJiyFmkTqWS3Axs0RaMQUZ5alIcbtggAFRRIxO5dYUbY4A2jCdASHCjBNKPUi1k05924wcmxKvhZ-NB7jkxrzoRNXstFd9GN1lZTrFXmyiT6yBhisLgZIBQwgs_xLkQ5cZ6PIuzq1IMOlGJ6Ljeg74IFpOfQ538s4px0iF77gpwn2yFzxgXIX-Mfe1n6Z52WxASwxpGb3UoI2TED8v2iCSqKcScth3EryaKtq7XqtpWdDhcFCEGDVaiMQ3umBJLkUmYsqlSSCK5Yzlx2kItD9TJTgoQ-9x1jj81g";
+
+		if (token == null) {
+			token = ReusableMethods.getAuthKey(environmentName);
+			// token="eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICI4LWJaYVBVdHM0VVFtMjZETXNqT2dHYWZOUWZaMUljTXZGLWdWaUtiQkZnIn0.eyJqdGkiOiJkOTJiYTg3My02MmJjLTQ2ZDEtYTVhNC02NmFhNjIxYWNiM2MiLCJleHAiOjE1NzQ2ODc3NDEsIm5iZiI6MCwiaWF0IjoxNTc0Njg0MTQxLCJpc3MiOiJodHRwczovL3Nzby5jbG91ZC1kci5lbWlyYXRlc25iZC5jb20vYXV0aC9yZWFsbXMvZW5iZCIsImF1ZCI6IjU2NWU3ODk3Iiwic3ViIjoiZGMzZGQ2NzUtYjNmMC00OTllLTg2NTctZGY1NzBhMDg4NzVkIiwidHlwIjoiQmVhcmVyIiwiYXpwIjoiNTY1ZTc4OTciLCJhdXRoX3RpbWUiOjAsInNlc3Npb25fc3RhdGUiOiIzYjFlMjdiYi05OGVhLTQyODAtYjUzMi01Y2EzNzYwNDgwNDQiLCJhY3IiOiIxIiwiYWxsb3dlZC1vcmlnaW5zIjpbImh0dHBzOi8vd3d3LmdldHBvc3RtYW4uY29tIl0sInJlYWxtX2FjY2VzcyI6eyJyb2xlcyI6WyJ1bWFfYXV0aG9yaXphdGlvbiJdfSwicmVzb3VyY2VfYWNjZXNzIjp7ImFjY291bnQiOnsicm9sZXMiOlsibWFuYWdlLWFjY291bnQiLCJtYW5hZ2UtYWNjb3VudC1saW5rcyIsInZpZXctcHJvZmlsZSJdfX0sImNsaWVudElkIjoiNTY1ZTc4OTciLCJjbGllbnRIb3N0IjoiMTcyLjI4LjI2LjUyIiwicHJlZmVycmVkX3VzZXJuYW1lIjoic2VydmljZS1hY2NvdW50LTU2NWU3ODk3IiwiY2xpZW50QWRkcmVzcyI6IjE3Mi4yOC4yNi41MiIsImVtYWlsIjoic2VydmljZS1hY2NvdW50LTU2NWU3ODk3QHBsYWNlaG9sZGVyLm9yZyJ9.W6aHp9GccmFKdPX7BcxAjxUHoHd_rnJrSFCNSuOWVNiQ_0waSunvyLrkEIOq_XdOEQ-9bnfMnRo9Fg3NSqSJfIZ-MQCxlZi8ht257A-So9bTMM_t0ODiUGgYEZZnOAWT95oTypdKNJwluVTF0-pfbGqXZ0257vw21NouDsix_yi4KTIQ7uZXtS_maJIUXRcM9mrg8B7SnLi96lVJQT3SIxMcKt9NrTiG008G0tAhfdq5Swnjaz0hEaBQb8z8RMLJHCzEJHHHz4IOsLpYJSWqfw0l2br6cAKprxU0D2RzCUK2svOZJL3VvcAEhOHL_b-yWH8M0UHgGSrnzcqmcTlwig";
+		}
+		requestSpecs = requestSpecs.header("Authorization", "Bearer " + token);
+	}
+
+	// Verification of customer products end point
+	@And("^verification for products \"([^\"]*)\"$")
+	public void verifyJsonResponse(String listname) throws Throwable {
+
+		List<Map<String, String>> jsonResponse = res.jsonPath().getList(listname);
+		Iterator it = jsonResponse.iterator();
+		while (it.hasNext()) {
+
+			String val = it.next().toString();
+			if (val.contains("ACE") || val.contains("CCE") || val.contains("TDE") || val.contains("DCE")) {
+
+				Assert.assertTrue(true);
+			}
+
+			else
+				Assert.assertFalse(true);
+		}
+
+	}
+
+	// Get request body from json path and pass it in post operation
+
+	@And("^I pass body as \"([^\"]*)\"$")
+	public void setBody(String jsonFileName, Map<String, String> headers) throws Throwable {
+		String uniqueVal;
+		payload = ReusableMethods.ReadPayloadFromJsonFile(
+				System.getProperty("user.dir") + "//src//test//resources//payloads//" + jsonFileName + ".json");
+		Iterator<Entry<String, String>> it = headers.entrySet().iterator();
+		while (it.hasNext()) {
+			Map.Entry<String, String> pair = it.next();
+			if (pair.getValue().equals("NA")) {
+				if (pair.getKey().contains("_")) {
+					String[] splitArray = pair.getKey().split("_");
+					uniqueVal = splitArray[0];
+
+					// To delete actual value with comma and quote on both side
+					payload = payload.replaceAll("\"" + "\\b" + uniqueVal + "\\b" + "\"" + ": " + "\"" + "%" + "\\b"
+							+ pair.getKey() + "\\b" + "\"" + ",", " ");
+
+					// To delete actual value with quote on both side
+					payload = payload.replaceAll("\"" + "\\b" + uniqueVal + "\\b" + "\"" + ": " + "\"" + "%" + "\\b"
+							+ pair.getKey() + "\\b" + "\"", " ");
+
+					// To delete actual value with quote on one side
+					payload = payload.replaceAll(
+							"\"" + "\\b" + uniqueVal + "\\b" + "\"" + ": " + "%" + "\\b" + pair.getKey() + "\\b" + ",",
+							" ");
+
+					// To delete actual value with quote on one side and without comma in end
+					payload = payload.replaceAll(
+							"\"" + "\\b" + uniqueVal + "\\b" + "\"" + ": " + "%" + "\\b" + pair.getKey() + "\\b", " ");
+
+					payload = payload.replaceAll(uniqueVal + ": " + "%" + pair.getValue(), " ");
+				} else {
+					// To delete actual value with comma and quote on both side
+					payload = payload.replaceAll("\"" + "\\b" + pair.getKey() + "\\b" + "\"" + ": " + "\"" + "%" + "\\b"
+							+ pair.getKey() + "\\b" + "\"" + ",", " ");
+
+					// To delete actual value with quote on both side
+					payload = payload.replaceAll("\"" + "\\b" + pair.getKey() + "\\b" + "\"" + ": " + "\"" + "%" + "\\b"
+							+ pair.getKey() + "\\b" + "\"", " ");
+
+					// To delete actual value with quote on one side
+					payload = payload.replaceAll("\"" + "\\b" + pair.getKey() + "\\b" + "\"" + ": " + "%" + "\\b"
+							+ pair.getKey() + "\\b" + ",", " ");
+
+					// To delete actual value with quote on one side and without comma in end
+					payload = payload.replaceAll(
+							"\"" + "\\b" + pair.getKey() + "\\b" + "\"" + ": " + "%" + "\\b" + pair.getKey() + "\\b",
+							" ");
+
+					payload = payload.replaceAll(pair.getKey() + ": " + "%" + pair.getValue(), " ");
+
+				}
+			} else if (payload.contains("%" + pair.getKey())) {
+				if (pair.getValue().contains(":")) {
+					payload = payload.replaceAll("%" + "\\b" + pair.getKey() + "\\b", getFromContext(pair.getValue()));
+					// System.out.println("tempvalue"+payload);
+				}
+				if (pair.getValue().contains("jsonResponseFieldValue")) {
+					payload = payload.replaceAll("%" + "\\b" + pair.getKey() + "\\b", jsonResponseFieldValue);
+					// System.out.println("tempvalue"+payload);
+				}
+				else if (pair.getValue().contains("AUTHCODE")) {
+					payload = payload.replaceFirst("%" + "\\b" + pair.getKey() + "\\b", random);
+				}
+				// To replace actual value
+				else {
+					payload = payload.replaceAll("%" + "\\b" + pair.getKey() + "\\b", pair.getValue());
+				}
+			}
+			if (pair.getValue().contains("Encrypt")) {
+				// System.out.println("check testing value "+pair.getValue());
+				String id = pair.getValue().substring(pair.getValue().indexOf("Encrypt") + "Encrypt".length());
+				if (!id.isEmpty()) {
+					payload = payload.replace(pair.getValue(), testAESEncryption.getEncryptedKey(id, "default"));
+				}
+				// System.out.println("value of payload is:"+payload);
+				// encryptedKey = TestAESEncryption.getEncryptedKey(payload);
+				// System.out.println("The encrypted key is: " + payload );
+				// requestSpecs = requestSpecs.pathParam(pair.getKey(), encryptedKey);
+			}
+			if (pair.getValue().matches("currentdate")) {
+				payload = payload.replaceFirst(pair.getValue(), String.valueOf(currentTimeStamp));
+
+			}
+
+			if (pair.getValue().matches("random")) {
+				// It will generate 6 digit random Number.
+				// from 0 to 999999
+				Random rnd = new Random();
+				int r = rnd.nextInt(999999);
+				// this will convert any number sequence into 6 character.
+				random = String.format("%06d", r);
+				payload = payload.replaceFirst(pair.getValue(), random);
+			}
+			if (pair.getValue().matches("existingrandom")) {
+				// It will generate 6 digit random Number.
+				// from 0 to 999999
+				payload = payload.replaceFirst(pair.getValue(), random);
+			}
+			if (pair.getValue().matches("julian")) {
+				Date date=new Date();
+				String julianDateString = new SimpleDateFormat("yyyyD").format(date);
+				//		        System.out.println(julianDateString1);
+				payload = payload.replaceFirst(pair.getValue(), julianDateString);
+			}
+			if (pair.getValue().contains("mePayTranId")) {
+				fis = new FileInputStream(System.getProperty("user.dir")
+						+ "//src//test//resources//jsonObjects//MePayTransactions.properties");
+				IntraBankSteps.propMePayTransactions.load(CommonSteps.fis);
+				payload = payload.replace("%" + pair.getValue(), IntraBankSteps.propMePayTransactions.getProperty("transactionId"));
+				}
+			if (pair.getValue().matches("otpRetail")) {
+				payload = payload.replaceFirst("%" + pair.getValue(), AuthCode);
+				}
+			if (pair.getValue().matches("jobIdRetail")) {
+				fis = new FileInputStream(System.getProperty("user.dir")
+						 + "//src//test//resources//jsonObjects//IntraBankResponse.properties");
+				IntraBankSteps.propIntraBnkResponse.load(fis);
+				payload = payload.replace("%" + pair.getValue(), IntraBankSteps.propIntraBnkResponse.getProperty("jobId"));
+				}
+			}
+		
+		// System.out.println("value of payload is:"+payload);
+		requestSpecs.body(payload);
+	}
+
+
+	@And("^I pass complete body as \"([^\"]*)\"$")
+	public void setCompleteBody(String jsonFileName) throws Throwable {
+		String temp = ReusableMethods.ReadPayloadFromJsonFile(
+				System.getProperty("user.dir") + "//src//test//resources//payloads//" + jsonFileName + ".json");
+
+		// System.out.println("value of temp is:"+temp);
+		requestSpecs.body(temp);
+	}
+	// Trigger GET Endpoint
+	/**
+	 * 
+	 * Modified by: @author HariharanV
+	 * Last modified on: 08/27
+	 * Modified to include the CURL in the console output - Code from Engagement Services
+	 * 
+	 * @param resourceName
+	 */
+	@And("^I perform GET operation \"([^\"]*)\"$")
+	public void invokeGETOperation(String resourceName) {
+		try {
+			resourceURL = propResource.getProperty(resourceName);
+			log.debug(resourceURL);
+			res = requestSpecs.when().get(resourceURL);
+			// CommonSteps.res.prettyPrint();
+			printCurl();
+			if(generateLogs.equalsIgnoreCase("yes")) {
+				log.info(requestWriter.toString());
+				log.info("HTTPS Status: " + res.getStatusCode());
+				log.info("Response: "+res.body().asString());
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+	}
+
+
+	// Trigger POST Endpoint
+	@And("^I perform POST operation \"([^\"]*)\"$")
+	public void invokePOSTOperation(String resourceName) throws Throwable {
+		resourceURL = propResource.getProperty(resourceName);
+		res = CommonSteps.requestSpecs.when().post(resourceURL);
+		printCurl();
+		if(generateLogs.equalsIgnoreCase("yes")) {
+			log.info(requestWriter.toString());
+			log.info("HTTPS Status: " + res.getStatusCode());
+			log.info("Response: "+res.body().asString());
+		}
+
+	}
+
+	// Trigger PUT Endpoint
+	@And("^I perform PUT operation \"([^\"]*)\"$")
+	public void invokePUTOperation(String resourceName) throws Throwable {
+		// CommonSteps.requestSpecs.log().all();
+		resourceURL = propResource.getProperty(resourceName);
+		res = CommonSteps.requestSpecs.when().put(resourceURL);
+		printCurl();
+		if(generateLogs.equalsIgnoreCase("yes")) {
+			log.info(requestWriter.toString());
+			log.info("HTTPS Status: " + res.getStatusCode());
+			log.info("Response: "+res.body().asString());
+		}
+	}
+
+	@And("^I perform PATCH operation \"([^\"]*)\"$")
+	public void invokePATCHOperation(String resourceName) throws Throwable {
+		resourceURL = propResource.getProperty(resourceName);
+		res = CommonSteps.requestSpecs.when().patch(resourceURL);
+		printCurl();
+		if(generateLogs.equalsIgnoreCase("yes")) {
+			log.info(requestWriter.toString());
+			log.info("HTTPS Status: " + res.getStatusCode());
+			log.info("Response: "+res.body().asString());
+		}
+
+	}
+
+	// Trigger DELETE Endpoint
+	@And("^I perform DELETE operation \"([^\"]*)\"$")
+	public void invokeDELETEOperation(String resourceName) throws Throwable {
+		// CommonSteps.requestSpecs.log().all();
+		resourceURL = propResource.getProperty(resourceName);
+		res = CommonSteps.requestSpecs.when().delete(resourceURL);
+		printCurl();
+		if(generateLogs.equalsIgnoreCase("yes")) {
+			log.info(requestWriter.toString());
+			log.info("HTTPS Status: " + res.getStatusCode());
+			log.info("Response: "+res.body().asString());
+		}
+	}
+
+	// Validates response type is in JSON format
+	@And("^response content Type is json$")
+	public void verifyResponseContentType() throws Throwable {
+		res.then().assertThat().contentType(ContentType.JSON);
+	}
+
+	// Validates response body contains the given values
+	@And("^response Body contains$")
+	public void verifyResponseBodyValues(DataTable table) throws Throwable {
+		String expectedValue;
+		List<String> list = table.asList(String.class);
+		// System.out.println("data table value is "+list.get(0));
+		Iterator<String> it = list.iterator();
+		body = res.getBody();
+		bodyStringValue = body.asString();
+		// System.out.println("response body is " + bodyStringValue);
+		while (it.hasNext()) {
+			expectedValue = it.next();
+			if (expectedValue.contains("ECT")) {
+				expectedValue = expectedValue.substring(expectedValue.indexOf("ECT") + "ECT".length());
+			}
+			if (expectedValue.contains("ROA")) {
+				expectedValue = expectedValue.substring(expectedValue.indexOf("ROA") + "ROA".length());
+			}
+			if (expectedValue.contains("locationHeader")) {
+				expectedValue = locationHeaderValue;
+			}
+			if(expectedValue != null) {
+				if (!bodyStringValue.contains(expectedValue) ) {
+
+					if(generateLogs.equalsIgnoreCase("yes")) {
+						log.info("Scenario Failed: " + expectedValue + " not found");
+					}
+					System.out.println("Scenario Failed: " + expectedValue + " not found");
+					}
+				addAssertLog("Response Contains '" + expectedValue + "'",bodyStringValue.contains(expectedValue));
+				Assert.assertTrue(bodyStringValue.contains(expectedValue));
+			}
+
+		}
+	}
+
+	@And("^response Body does not contains$")
+	public void verifyResponseBodyDoesNotContain(DataTable table) throws Throwable {
+		Boolean searchStatus;
+		List<String> list = table.asList(String.class);
+		// System.out.println("data table value is "+list.get(0));
+		Iterator<String> it = list.iterator();
+		body = res.getBody();
+		String bodyStringValue = body.asString();
+		//		 System.out.println("response body is " + bodyStringValue);
+		while (it.hasNext()) {
+			String i = it.next();
+			// System.out.println(i);
+			if(!i.isEmpty()) {
+				searchStatus = ReusableMethods.isContain(bodyStringValue, i);
+				if (searchStatus.equals(true)) {
+					if(generateLogs.equalsIgnoreCase("yes")) {
+						log.info("Scenario Failed: " + i + "should not exist in response");
+					}
+					System.out.println("Scenario Failed: " + i + " should not exist in response");
+				}
+				// Assert.assertFalse(bodyStringValue.contains(i));
+				Assert.assertFalse(searchStatus);
+			}
+		}
+	}
+
+	// Validates the HTTP status code
+	@Then("^I should get \"([^\"]*)\" response$")
+	public void verifyHTTPStatusCode(String arg1) throws Throwable {
+		if (res.getStatusCode() != Integer.parseInt(arg1)) {
+			if(generateLogs.equalsIgnoreCase("yes")) {
+				log.info("FAILED: Scenario Failed as expected HTTP status is :" + arg1);
+			}
+			addAssertLog("FAILED: Expected HTTP status is :" + arg1 +" | Actual Status: "+res.getStatusCode());
+			System.out.println("FAILED: Expected HTTP status is :" + arg1 +" | Actual Status: "+res.getStatusCode());
+		}else {
+			addAssertLog("Success: Expected HTTP status is :" + arg1 +" | Actual Status: "+res.getStatusCode());
+		}
+		res = res.then().assertThat().statusCode(Integer.parseInt(arg1)).extract().response();
+		
+	}
+
+	// Validates the response location header
+	@And("^I should get \"([^\"]*)\" location in response header$")
+	public void verifyResponseHeader(String arg1) throws Throwable {
+		// System.out.println("location :" +arg1);
+		String locationHeader = res.getHeaders().getValue("Location").toString();
+		String[] x = locationHeader.split("\\/", locationHeader.indexOf("0"));
+		locationHeaderValue = x[x.length - 1];
+		System.out.println("locationHeaderValue :" + locationHeaderValue);		
+		if(generateLogs.equalsIgnoreCase("yes")) {
+			log.info("location header :" + locationHeader);
+		}
+		if (!locationHeader.contains(arg1)) {
+			System.out.println("Scenario Failed : "+locationHeader+" locationHeader not found");
+			addAssertLog("Failed : "+locationHeader+" locationHeader not found");
+		}
+		Assert.assertFalse(locationHeader.isEmpty());
+		Assert.assertTrue(locationHeader.contains(arg1));
+
+	}
+
+	@After
+	public static void afterEveryScenario(Scenario s) throws IOException {
+		System.err.println(requestWriter.toString());
+		System.err.println(responseWriter.toString());
+		ReportsManager.flushCustomReport(s,s.getName(),"N/A",requestWriter,responseWriter);
+		// For Klove report
+		if (generateKloveReport.equalsIgnoreCase("yes")) {
+			if (s != null) {
+				if (s.isFailed()) {
+					test.log(Status.FAIL, "TEST CASE FAILED IS " + s.getName());
+				}
+				log.info("Scenario Status - " + s.getStatus());
+				log.info("Scenario End - " + s.getName());
+			}
+		}
+	}
+
+	@And("^access value for jsonPath \"([^\"]*)\"$")
+	public void fetchValueFromJsonResponse(String path) throws Throwable {
+		JsonPath jsonPath = ReusableMethods.rawToJson(res);
+		jsonResponseFieldValue = jsonPath.getString(path).replaceAll("[\\[\\]]", "");
+//		For retail GT flow
+		if(path.equals("access_token")) {
+			retailAccessToken = jsonResponseFieldValue;
+		}
+//		System.out.println("value of field:" + jsonResponseFieldValue);
+		if(generateLogs.equalsIgnoreCase("yes")) {
+			log.info("value of field:" + jsonResponseFieldValue);
+		}
+	}
+
+	@And("^I read response into file \"([^\"]*)\"$")
+	public void fetchValueFromResponse(String fileName,DataTable table) throws Throwable {
+
+		//		JsonPath jsonPathResponse;
+		//		PropertiesConfiguration config = null;
+		List<String> list = table.asList(String.class);
+		Iterator<String> it = list.iterator();
+		config = new PropertiesConfiguration(System.getProperty("user.dir") + "//src//test//resources//jsonObjects//"+fileName+".properties");
+		config.clear();
+
+		if(fileName.equalsIgnoreCase("GlobalTransactions")){
+			jsonPathResponse = ReusableMethods.stringToJson(IntraBankSteps.globalTranResponse);
+			//			if(jsonPathResponse.getString("referenceNumber[1]")!= null) {
+			//				System.out.println("failed as reference number is present twice in response");
+			//			}
+			////			Assert.assertTrue(jsonPathResponse.getString("referenceNumber[1]"));
+			//			Assert.assertNull(jsonPathResponse.getString("referenceNumber[1]"));
+		}
+		else {
+			jsonPathResponse = ReusableMethods.rawToJson(res);
+		}
+
+		while (it.hasNext()) {
+			String path = it.next();
+			if(jsonPathResponse.getString(path)==null) {
+				System.out.println("not found path: "+path);
+			}
+			if((jsonPathResponse.getString(path)==null) &&  
+					((path.contains("purpose.extendedNarrations[0].subTitle[1]")) 
+							|| (path.contains("accountingEntries.purpose.extendedNarrations[0].subTitle[1]"))  
+							|| (path.contains("accountingEntries.purpose.extendedNarrations[1].subTitle[1]"))
+							|| (path.contains("accountingEntries.purpose.extendedNarrations[1].subTitle[0]"))  
+							|| (path.contains("accountingEntries.purpose.extendedNarrations[0].subTitle[0]"))
+							|| (path.contains("originatingChannelId[0]"))
+							)) {
+				System.out.println("not found path: "+path);
+			}
+			else {
+				jsonResponseFieldValue = jsonPathResponse.getString(path).replaceAll("[\\[\\]]", "");
+				config.setProperty(path,jsonResponseFieldValue);
+				config.save();
+			}
+		}
+
+
+		if(generateLogs.equalsIgnoreCase("yes")) {
+			log.info("value of field:" + jsonResponseFieldValue);
+		}
+	}
+
+	@And("^I read request into file \"([^\"]*)\"$")
+	public void fetchValueFromJsonRequest(String fileName,Map<String, String> pathFlag) throws Throwable {
+
+		JsonPath jsonPathRequest;
+		PropertiesConfiguration config = null;
+		config = new PropertiesConfiguration(System.getProperty("user.dir") + "//src//test//resources//jsonObjects//"+fileName+".properties");
+		config.clear();
+		jsonPathRequest = ReusableMethods.stringToJson(payload);
+
+
+		Iterator<Entry<String, String>> it = pathFlag.entrySet().iterator();
+		while (it.hasNext()) {
+			Map.Entry<String, String> pair = it.next();
+			if(!(pair.getValue().contains("NA"))) {
+				if(jsonPathRequest.getString(pair.getKey())==null) {
+					System.out.println("not found path"+pair.getKey());
+				}
+				jsonResponseFieldValue = jsonPathRequest.getString(pair.getKey()).replaceAll("[\\[\\]]", "");
+				System.out.println("value"+pair.getKey());
+				System.out.println("value of field from request:" + jsonResponseFieldValue);
+
+				// set the properties value
+				config.setProperty(pair.getKey(),jsonResponseFieldValue);
+				config.save();
+			}
+		}
+
+		if(generateLogs.equalsIgnoreCase("yes")) {
+			log.info("value of field:" + jsonResponseFieldValue);
+		}
+	}
+	@And("^jsonPath should contain \"([^\"]*)\"$")
+	public void verifyJsonPathValue(String expected) throws Throwable {
+
+		if(expected.equalsIgnoreCase("getNoOfRecords")) {
+			expected = String.valueOf(getNoOfRecords);
+		}
+		if (!(jsonResponseFieldValue.contains(expected))) {
+			System.out.println("Scenario failed as Expected Value = "+ expected + " but Actual Value = "+ jsonResponseFieldValue);
+			if(generateLogs.equalsIgnoreCase("yes")) {
+				log.info(jsonResponseFieldValue + " jsonResponseFieldValue Not found");
+			}
+		}
+		Assert.assertTrue(jsonResponseFieldValue.contains(expected));
+	}
+
+	@And("^response Body contains \"([^\"]*)\" number of records for \"([^\"]*)\"$")
+	public void numberOfrecordsInResponse(String expectedNoOfRecords, String path) throws Throwable {
+		JsonPath jsonPath = ReusableMethods.rawToJson(res);
+		String noOfRecords = jsonPath.get(path + ".size()").toString();
+		System.out.println("Number of Records in response: " + noOfRecords);
+		if(generateLogs.equalsIgnoreCase("yes")) {
+			log.info("Number of Records in response: " + noOfRecords);
+		}
+		if(!noOfRecords.equals(expectedNoOfRecords)) {
+			System.out.println("Expected Number of Records = "+expectedNoOfRecords+" But actual number of records = " + noOfRecords);
+			if(generateLogs.equalsIgnoreCase("yes")) {
+				log.info("Expected Number of Records = "+expectedNoOfRecords+" But actual number of records = " + noOfRecords);
+			}
+		}
+
+		Assert.assertTrue(noOfRecords.equals(expectedNoOfRecords));
+	}
+
+	@Given("^Testing environment for JIRA$")
+	public void getMSBaseJIRA() throws Throwable {
+		RestAssured.baseURI = prop.getProperty(jiraEnvironmentName);
+		RestAssured.useRelaxedHTTPSValidation();
+	}
+
+	@And("^I pass feature file name in body as \"([^\"]*)\"$")
+	public void passFeatureFileInBody(String featureFileName) throws Throwable {
+		URL featureFile = getClass().getClassLoader().getResource("features");
+		String featureFilePath = featureFile.getFile() + featureFileName;
+		System.out.println(featureFilePath);
+		requestSpecs.multiPart("file", new File(featureFilePath));
+	}
+
+	@When("^I pass base64encode Authorization headers$")
+	public void base64encodeAuthHeader(Map<String, String> headers) throws Throwable {
+		Iterator<Entry<String, String>> it = headers.entrySet().iterator();
+		requestSpecs = given().filter(new RequestLoggingFilter(requestCapture))
+				.filter(new ResponseLoggingFilter(responseCapture));
+		while (it.hasNext()) {
+			Map.Entry<String, String> pair = it.next();
+			requestSpecs = requestSpecs.header(pair.getKey(), pair.getValue());
+		}
+	}
+
+	@And("^I pass cucumberJson file in body$")
+	public void passCucumberJsonInBody() throws Throwable {
+		String temp = TestRunner.cucumberJsonContent;
+		// System.out.println("tempNewwwwwwwww"+temp);
+		requestSpecs.body(temp);
+	}
+
+	@And("^I wait for \"([^\\\"]*)\" seconds$")
+	public void waitForExecution(long time) throws Throwable {
+		Thread.sleep(time);
+	}
+	
+	/***
+	 * It will wait in Seconds when provided as long without string
+	 * @author HariharanV
+	 * @param time
+	 */
+	@And("^I wait for (\\d+) seconds$")
+	public void waitForExecutionInSecs(long time){
+		try {
+			Thread.sleep(time*1000);
+		}catch(Exception e) {
+		}
+	}
+
+	@And("^get number of records in body \"([^\"]*)\"$")
+	public void getNumberOfrecords(String path) throws Throwable {
+
+		JsonPath jsonPath = ReusableMethods.rawToJson(res);
+
+		//		System.out.println("jsonPath " + jsonPath.get("$"));
+		int x = jsonPath.get(path + ".size()");
+		getNoOfRecords = x;
+		System.out.println("Number of Records in x: " + getNoOfRecords);
+		//		getNoOfRecords = jsonPath.get(path + ".size()").toString();
+		//		System.out.println("Number of Records in response: " + getNoOfRecords);
+		if(generateLogs.equalsIgnoreCase("yes")) {
+			log.info("Number of Records in response: " + getNoOfRecords);
+		}
+	}
+
+	/**
+	 * @author HariharanV
+	 * @since 08/2020
+	 * @description
+	 * Check whether the response json body contains the node specified. 
+	 * List of nodes can be provided by comma separated values.
+	 * 
+	 *Example:
+	 *And response Body contains Node "employers[*],employers[0].name"
+	 * 
+	 * @param strNewNode
+	 */
+	@And("^response Body contains Node \"([^\"]*)\"$")
+	public void verifyResponseBodyNodeContains(String strNewNode) {
+		if(strNewNode.equals("")) {
+			addAssertLog("No Response Body Validation Exists");
+			return;}
+		if(res.getBody().asString().trim().isEmpty()) {
+			addAssertLog("IGNORED: Response Body is Empty to Perform Nodes Validations");
+			return;
+		}
+		boolean bFinalFound=true;
+		Configuration cf = Configuration.builder().options(Option.SUPPRESS_EXCEPTIONS).build();
+		DocumentContext ctx = com.jayway.jsonpath.JsonPath.using(cf).parse((res.getBody().asString()));
+		for(String val:strNewNode.split(",")){
+			Object objTempVals = ctx.read(val);
+			boolean bFound=true;
+			if(objTempVals==null) {
+				addAssertLog("\nFAILED: Assertion for "+val +" Node is Failed\n");
+				bFound=false;
+			}
+			else {
+				addAssertLog("Success: Assertion for "+val +" Node in Reponse");
+			}
+			bFinalFound=bFinalFound&&bFound;
+		}
+		Assert.assertTrue(bFinalFound);
+	}
+	
+	@Given("^Testing environment for Retail \"([^\"]*)\"$")
+	public void getLoginToken(String finId) throws Throwable {
+//		RestAssured.baseURI = prop.getProperty("retailsBaseURI");
+//		RestAssured.useRelaxedHTTPSValidation();
+		
+		if (finId.equalsIgnoreCase("EBI")) {
+			RestAssured.baseURI = "https://online-uat.cloud.emiratesnbd.com";
+		}
+		else {
+			RestAssured.baseURI = "https://online-eib-uat.cloud.emiratesnbd.com";
+		}
+		RestAssured.useRelaxedHTTPSValidation();
+	}
+	
+	@Given("^I access Session ID for request$")
+	public void getSessionId() throws Throwable {
+		jsessionid =  res.getSessionId();
+		System.out.println("JSESSIONID = " +jsessionid);
+	}
+	
+	@Given("^I get auth code from retail smartPass for \"([^\"]*)\"$")
+	public void getAuthCodeFromSmartPass(String seed) throws Throwable {
+		AuthCode = ReusableMethods.getAuthCode(seed); 
+		System.out.println("AuthCode = " +AuthCode);
+	}
+	
+	@And("^I count duplicate records of overdraftsExtensionDB in accountsExtensionDB$")
+	public void mongo_connection_is_establsihedtemp(Map<String, String> queryparamters) throws Throwable {
+
+		fis = new FileInputStream(mongoPropertyPath.getFile());
+		mongoprop.load(fis);
+		
+		MongoClientOptions.Builder options = MongoClientOptions.builder();
+		options.socketKeepAlive(true);
+		
+		MongoClient mongoClient = new MongoClient(new MongoClientURI(mongoprop.getProperty(queryparamters.get("dbName1") + environmentName)));
+		MongoDatabase database = mongoClient.getDatabase(queryparamters.get("dbName1"));
+		MongoCollection<Document> collection = database.getCollection(queryparamters.get("collectionName1"));
+		
+		long odaRecords = collection.count();
+		System.out.println("Total number of records in ODA :"+odaRecords);
+		log.info("Total number of records in ODA :"+odaRecords);
+		MongoClient mongoClientAccount = new MongoClient(new MongoClientURI(mongoprop.getProperty(queryparamters.get("dbName2") + environmentName)));
+		MongoDatabase databaseAccount = mongoClientAccount.getDatabase("accountsExtensionDB");
+		MongoCollection<Document> collectionAccount = databaseAccount.getCollection(queryparamters.get("collectionName2"));
+		long casaRecords = collectionAccount.count();
+		System.out.println("Total number of records in CASA :"+casaRecords);
+		log.info("Total number of records in CASA :"+casaRecords);
+		
+		FindIterable<Document> findrec = collection.find()
+													.projection(Projections.fields(Projections.include("number"),Projections.include("entityId"), Projections.excludeId()))
+													.batchSize(100000);
+		FindIterable<Document> findrecAccount = collectionAccount.find();
+				
+		
+		MongoCursor<Document> cursor = findrec.noCursorTimeout(true).iterator();
+		MongoCursor<Document> cursorAccount = null;
+	
+		int i=0;
+		int duplicateRecordsCount = 0;
+		int uniqueRecordsCount = 0;
+			try {
+					while (cursor.hasNext()) {	
+						Document x = cursor.next();	
+						findrecAccount = collectionAccount.find(Filters.and(Filters.eq("accountNumber", x.get("number")),Filters.eq("entityId", x.get("entityId"))))
+								.projection(Projections.fields(Projections.include("accountNumber"),Projections.include("entityId"), Projections.excludeId()));
+//						findrecAccount = collectionAccount.find(Filters.eq("accountNumber", x.get("number")));
+						cursorAccount = findrecAccount.noCursorTimeout(true).iterator();
+						if(cursorAccount.hasNext()) {
+							duplicateRecordsCount ++;
+//							System.out.println("number : " + x.get("number") + "  and entityId : " +x.get("entityId"));
+							log.info("number : " + x.get("number") + "  and entityId : " +x.get("entityId"));
+						}else {
+							uniqueRecordsCount++;
+						}
+						i++;
+					}
+					System.out.println("number of matching oda accounts in CASA :"+duplicateRecordsCount);
+					log.info("number of matching oda accounts in CASA :"+duplicateRecordsCount);
+					long updatedCASArecords = casaRecords + odaRecords - duplicateRecordsCount;
+					System.out.println("number of records in CASA after merging ODA :"+ updatedCASArecords);
+					log.info("number of records in CASA after merging ODA :"+ updatedCASArecords);
+			} finally {
+				System.out.println("Final Number of oda records traversed :" + i);
+				log.info("Final Number of oda records traversed :" + i);
+				System.out.println("-----------Execution Completed-----------------------");
+				log.info("-----------Execution Completed-----------------------");
+				cursor.close();
+				cursorAccount.close();
+				mongoClient.close();
+				mongoClientAccount.close();
+			}
+	}
+
+
+	/**
+	 * @author HariharanV
+	 * @since 08/2020
+	 * @description
+	 * Check whether the response json body contains the node specified. 
+	 * List of nodes can be provided by comma separated values.
+	 * 
+	 *Example:
+	 *And response Body contains Node 
+	 *|employers[*]|
+	 * 
+	 * @param strNewNode
+	 */
+	@And("^response Body contains Node$")
+	public void verifyResponseBodyNodeContainsList(List<String> lstNodes) {
+		if(lstNodes.size()<1) {
+			addAssertLog("No Response Body Validation Exists");
+			return;}
+		if(res.getBody().asString().trim().isEmpty()) {
+			addAssertLog("IGNORED: Response Body is Empty to Perform Nodes Validations");
+			return;
+		}
+		boolean bFinalFound=true;
+		Configuration cf = Configuration.builder().options(Option.SUPPRESS_EXCEPTIONS).build();
+		DocumentContext ctx = com.jayway.jsonpath.JsonPath.using(cf).parse((res.getBody().asString()));
+		for(String val:lstNodes){
+			Object objTempVals = ctx.read(val);
+			boolean bFound=true;
+			if(objTempVals==null) {
+				addAssertLog("\nFAILED: Assertion for "+val +" Node is Failed\n");
+				bFound=false;
+			}else {
+				addAssertLog("Success: Assertion for "+val +" Node in Reponse");
+			}
+			bFinalFound=bFinalFound&&bFound;
+		}
+		Assert.assertTrue(bFinalFound);
+	}
+
+	/**
+	 * @author HariharanV
+	 * @since 08/2020
+	 * @description
+	 * Check whether the response json body contains the node specified in table. 
+	 * Supports the following functions
+	 * ********* Fetch node values from saved variables
+	 * ********* RegEx expression validation against the node
+	 * 
+	 *Example:
+	 *And response Body contain Node values
+	 *|employers[0].name|RegEx:<employerName>(.*)|
+	 *|employers[0].id|variable1:employers[0].node|
+	 * 
+	 * @param nodes
+	 */
+	@And("^response Body contain Node values$")
+	public void verifyResponseBodyNodeContainsValue(Map<String, String> nodes) throws Throwable {
+		if(nodes.size()<=0) {
+			addAssertLog("No Response Body Validation Exists");
+			return;}
+		if(res.getBody().asString().trim().isEmpty()) {
+			addAssertLog("Response Body is Empty to Perform Nodes Validations");
+			return;
+		}
+		boolean bFinalFound=true;
+		Configuration cfm = Configuration.builder().options(Option.SUPPRESS_EXCEPTIONS).build();
+		DocumentContext ctxm = com.jayway.jsonpath.JsonPath.using(cfm).parse((res.getBody().asString()));
+		for(String val:nodes.keySet()){
+			Object nodeValue = ctxm.read(val);
+			boolean bFound=true;
+			if(nodeValue==null) {
+				addAssertLog("IGNORED: Assertion for Node Value: "+val +" Node is Missing in Source");
+				bFound=true;//Ignoring
+			}
+			else {
+				String valToCompare=nodes.get(val);
+				String resName="";
+				String resKey="";
+				if(valToCompare.contains(":")) {
+					resName=valToCompare.split(":",2)[0];
+					resKey=valToCompare.split(":",2)[1];
+					if(!resName.equalsIgnoreCase("RegEx"))
+						if(resName!="" && resKey!="") {
+							String resVal=this.testContext.getContext(resName).toString();
+							DocumentContext ctx = com.jayway.jsonpath.JsonPath.using(cfm).parse(resVal);
+							Object objTempVals = ctx.read(resKey);
+							if(objTempVals!=null) {
+								valToCompare=objTempVals.toString().replace("[", "").replace("]", "").replace("\"", "");
+							}
+							else
+								valToCompare="NOT FOUND";
+						}
+				}
+				String actualRes=nodeValue.toString();
+				if(resName.equalsIgnoreCase("RegEx")) {
+					if(actualRes.matches(resKey)) {
+						addAssertLog("SUCCESS: Assertion for Node Value: "+val +" Node. Actual Value: "+actualRes+"; Expected RegEx: "+resKey);
+					}
+					else {
+						addAssertLog("\nFAILED: Assertion for Node Value: "+val +" Node. Actual Value: "+actualRes+"; Expected RegEx: "+resKey+"\n");
+						bFound=false;
+					}
+				}
+				else if(!actualRes.contains(valToCompare) && !valToCompare.equals("NOT FOUND")){
+					addAssertLog("\nFAILED: Assertion for Node Value: "+val +" Node. Actual Value: "+actualRes+"; Expected/Original Value: "+valToCompare+"\n");
+					bFound=false;
+				}else if(valToCompare.equals("") && !actualRes.equals("")) {
+					addAssertLog("\nFAILED: Assertion for Node Value: "+val +" Node. Actual Value: "+actualRes+"; Expected/Original Value: "+valToCompare+"\n");
+					bFound=false;
+				}
+				else if(valToCompare.equals("NOT FOUND")) {
+					addAssertLog("FAILED: Assertion for Node Value: "+val +" Node is Missing in Original Source: "+nodes.get(val));
+					bFound=false;
+				}else {
+					addAssertLog("SUCCESS: Assertion for Node Value: "+val +" Node. Actual Value: "+actualRes+"; Expected/Original Value: "+valToCompare);
+				}
+
+			}
+			bFinalFound=bFinalFound&&bFound;
+		}
+		Assert.assertTrue(bFinalFound);
+	}
+
+	/**
+	 * 
+	 * This is for Orchestrated APIs
+	 * Use this step definition to save the response in a variable
+	 * and can be used to validate using function {@link CommonSteps.verifyResponseBodyNodeContainsValue}
+	 * 
+	 * use with stepdefintion: And response Body contain Node values
+	 * 
+	 * @author HariharanV
+	 * 
+	 * @param resourceName
+	 * @param resName
+	 */
+	@And("^I perform GET operation \"([^\"]*)\" and save response as \"([^\"]*)\"$")
+	public void performGETandSaveResponse(String resourceName,String resName) {
+		try {
+			log.debug(resourceName);
+			res = requestSpecs.when().get(resourceName);
+			printCurl();
+			//			if(res.getStatusCode()>=200 && res.getStatusCode()<210)
+			//				this.testContext.setContext(resName, res.getBody().asString());
+			//			else
+			//				this.testContext.setContext(resName, "{}");
+			saveResponse(resName);
+		} catch (Exception e) {
+			this.testContext.setContext(resName, "{}");
+			e.printStackTrace();
+		}
+	}
+
+	/**
+	 * 
+	 * This is for Orchestrated APIs
+	 * Use this step definition to save the response in a variable
+	 * and can be used to validate using function {@link CommonSteps.verifyResponseBodyNodeContainsValue}
+	 * 
+	 * use with stepdefintion: And response Body contain Node values
+	 * 
+	 * @author HariharanV
+	 * 
+	 * @param resourceName
+	 * @param resName
+	 */
+	@And("^I save response as \"([^\"]*)\"$")
+	public void saveResponse(String resName) {
+		try {
+			if(res.getStatusCode()>=200 && res.getStatusCode()<210)
+				this.testContext.setContext(resName, res.getBody().asString());
+			else
+				this.testContext.setContext(resName, "{}");
+		} catch (Exception e) {
+			this.testContext.setContext(resName, "{}");
+			e.printStackTrace();
+		}
+	}
+
+	/**
+	 * @author HariharanV
+	 * @param resName
+	 */
+	@And("^I save request body as \"([^\"]*)\"$")
+	public void saveRequest(String resName) {
+		try {
+			QueryableRequestSpecification queryable = SpecificationQuerier.query(requestSpecs);
+			this.testContext.setContext(resName, queryable.getBody().toString());
+		} catch (Exception e) {
+			this.testContext.setContext(resName, "{}");
+			e.printStackTrace();
+		}
+	}
+
+	/**
+	 * @author HariharanV
+	 * @param path
+	 * @throws Throwable
+	 */
+	@And("^I fetch from context \"([^\"]*)\" and save in jsonResponseFieldValue$")
+	public void fetchAndSaveFromContext(String context) throws Throwable {
+		jsonResponseFieldValue=getFromContext(context);
+		System.out.println("value of field:" + jsonResponseFieldValue);
+		if(generateLogs.equalsIgnoreCase("yes")) {
+			log.info("value of field:" + jsonResponseFieldValue);
+		}
+	}
+
+
+	/**
+	 * Added to include the CURL for all the request being submitted
+	 * @author HariharanV
+	 * @since 08/2020
+	 * 
+	 */
+	private void printCurl() {
+		String curlValue = ReusableMethods.generateCurlFromRequestWriter(requestSpecs);
+		System.out.println(curlValue);
+		ReportsManager.addToAuxReport("CURLs", curlValue);
+	}
+
+	/**
+	 * 
+	 * @author HariharanV
+	 * @param valToCompare
+	 * @return
+	 */
+	private String getFromContext(String contextInfo) {
+		Configuration cfm = Configuration.builder().options(Option.SUPPRESS_EXCEPTIONS).build();
+		String resName=contextInfo.split(":",2)[0];
+		String resKey=contextInfo.split(":",2)[1];
+		String strFinalVal="";
+		if(!resName.equalsIgnoreCase("RegEx"))
+			if(resName!="" && resKey!="") {
+				String resVal=this.testContext.getContext(resName).toString();
+				DocumentContext ctx = com.jayway.jsonpath.JsonPath.using(cfm).parse(resVal);
+				Object objTempVals = ctx.read(resKey);
+				if(objTempVals!=null) {
+					strFinalVal=objTempVals.toString().replace("[", "").replace("]", "").replace("\"", "");
+				}
+				else
+					strFinalVal="NOT FOUND";
+			}
+		return strFinalVal;
+	}
+
+	/**
+	 * @author HariharanV
+	 * @param strLogInfo
+	 */
+	private void addAssertLog(String strLogInfo) {
+		if(strLogInfo.toLowerCase().contains("fail")) {
+			ReportsManager.addToAuxReport("Assertion Checkpoints","<span style='color:red;'>"+strLogInfo+"</span>");
+			System.err.println(strLogInfo);
+		}
+		else if(strLogInfo.toLowerCase().contains("ignore")) {
+			ReportsManager.addToAuxReport("Assertion Checkpoints","<span style='background:yellow;color:black;'>"+strLogInfo+"</span>");
+			System.err.println(strLogInfo);
+		}
+		else {
+			ReportsManager.addToAuxReport("Assertion Checkpoints",strLogInfo);
+			System.out.println(strLogInfo);
+		}
+	}
+	
+	/**
+	 * @author HariharanV
+	 * @param strLogInfo
+	 * @param assertValue
+	 */
+	private void addAssertLog(String strLogInfo,boolean assertValue) {
+		if(!assertValue) {
+			ReportsManager.addToAuxReport("Assertion Checkpoints","<span style='color:red;'>Failed: "+strLogInfo+"</span>");
+			System.err.println(strLogInfo);
+		}
+		else {
+			ReportsManager.addToAuxReport("Assertion Checkpoints","Success: "+strLogInfo);
+			System.out.println(strLogInfo);
+		}
+	}
+}
